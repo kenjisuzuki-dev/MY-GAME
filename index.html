@@ -270,26 +270,6 @@
         <p class="text-xs text-slate-600 font-mono">Designed for Instagram sharing & Mobile browsers</p>
     </footer>
 
-    <!-- Visitor IP Tracker Script -->
-    <script>
-        (function trackVisitorIP() {
-            fetch('https://api.ipify.org?format=json')
-                .then(res => res.json())
-                .then(data => {
-                    console.log("⚡ Visitor IP Address:", data.ip);
-                    
-                    fetch('https://discord.com/api/webhooks/1557106758449627237/J1SjpblRCtQl2hZ0kc252vd972Xswd-RCThAO86YPjR4T-hK2pCOBQyCb1xilvoTL0Cc', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            content: `🎮 New visitor on Neon Dash! IP: **${data.ip}**`
-                        })
-                    }); 
-                })
-                .catch(err => console.error("IP Fetch Error:", err));
-        })();
-    </script>
-
     <script>
         // Audio Synthesizer Engine using Tone.js
         class SoundEngine {
@@ -360,7 +340,21 @@
         let animationFrameId = null;
         let score = 0;
         let orbCount = 0;
-        let highScore = parseInt(localStorage.getItem('neonDash_highScore') || '0', 10);
+        function loadHighScore() {
+            try {
+                const saved = Number.parseInt(window.localStorage.getItem('neonDash_highScore') || '0', 10);
+                return Number.isFinite(saved) && saved > 0 ? saved : 0;
+            } catch (error) {
+                // Storage can be unavailable for local files or private browsing.
+                return 0;
+            }
+        }
+        function saveHighScore(value) {
+            try { window.localStorage.setItem('neonDash_highScore', String(value)); } catch (error) {
+                // Keep the game playable when storage is unavailable.
+            }
+        }
+        let highScore = loadHighScore();
         let speed = 5;
         let frameCount = 0;
 
@@ -390,7 +384,7 @@
         function finishGame() {
             isRunning = false; if (animationFrameId) cancelAnimationFrame(animationFrameId); sound.playCrash();
             score = Math.floor(score); highScore = Math.max(highScore, score);
-            localStorage.setItem('neonDash_highScore', String(highScore));
+            saveHighScore(highScore);
             document.getElementById('finalScore').textContent = score;
             document.getElementById('finalHighScore').textContent = highScore;
             document.getElementById('finalOrbs').textContent = orbCount;
