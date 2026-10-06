@@ -260,6 +260,20 @@
         </div>
     </div>
 
+    <!-- Optional IP sharing consent -->
+    <div id="ipConsentModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 text-center">
+            <div class="w-12 h-12 rounded-xl bg-neonCyan/15 text-neonCyan flex items-center justify-center text-2xl mx-auto mb-3">
+                <i class="fas fa-shield-halved"></i>
+            </div>
+            <h3 class="font-orbitron text-xl font-bold text-white mb-3">Optional IP Sharing</h3>
+            <p class="text-sm text-slate-300 mb-5">If you agree, a public IP lookup service will identify your IP and send it to the game owner’s Discord. You can play without sharing.</p>
+            <div class="space-y-2">
+                <button id="shareIpAndPlayBtn" class="w-full py-3 rounded-xl bg-neonCyan text-slate-950 font-orbitron font-bold text-sm hover:opacity-90 transition">ALLOW & PLAY</button>
+                <button id="playWithoutSharingBtn" class="w-full py-3 rounded-xl bg-slate-800 border border-slate-700 text-white font-bold text-sm hover:bg-slate-700 transition">PLAY WITHOUT SHARING</button>
+            </div>
+        </div>
+    </div>
     <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-neonCyan text-slate-950 font-bold px-4 py-2.5 rounded-full shadow-lg shadow-neonCyan/30 text-sm opacity-0 pointer-events-none transition-all duration-300 z-50 flex items-center gap-2">
         <i class="fas fa-check-circle"></i> <span id="toastMsg">Copied to clipboard!</span>
@@ -364,6 +378,7 @@
         // Complete the player object and game controls (the original file ended mid-line here).
         const player = { x: 50, y: 0, size: 24, vy: 0, gravity: 0.55, jumpPower: -10, jumps: 0 };
         const obstacles = [];
+        const orbs = [];
         let groundY = 0;
         const startScreen = document.getElementById('startScreen');
         const gameOverScreen = document.getElementById('gameOverScreen');
@@ -376,7 +391,7 @@
         }
         function startGame() {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            sound.init(); resizeCanvas(); score = 0; orbCount = 0; speed = 5; frameCount = 0; obstacles.length = 0;
+            sound.init(); resizeCanvas(); score = 0; orbCount = 0; speed = 5; frameCount = 0; obstacles.length = 0; orbs.length = 0;
             player.y = groundY - player.size; player.vy = 0; player.jumps = 0; isRunning = true;
             startScreen.classList.add('hidden'); gameOverScreen.classList.add('hidden'); gameHud.classList.remove('hidden');
             animationFrameId = requestAnimationFrame(loop);
@@ -401,6 +416,20 @@
             ctx.fillStyle = '#00f3ff'; ctx.shadowColor = '#00f3ff'; ctx.shadowBlur = 12;
             ctx.fillRect(player.x, player.y, player.size, player.size); ctx.shadowBlur = 0;
             if (frameCount % 75 === 0) obstacles.push({ x: w, width: 24, height: 30 + Math.random() * 25 });
+            if (frameCount % 100 === 0) orbs.push({ x: w + 10, y: groundY - 52 - Math.random() * 72, radius: 9 });
+            ctx.fillStyle = '#ff007f'; ctx.shadowColor = '#ff007f'; ctx.shadowBlur = 14;
+            for (let i = orbs.length - 1; i >= 0; i--) {
+                const orb = orbs[i]; orb.x -= speed;
+                ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2); ctx.fill();
+                const playerCenterX = player.x + player.size / 2;
+                const playerCenterY = player.y + player.size / 2;
+                if (Math.abs(orb.x - playerCenterX) < orb.radius + player.size / 2 &&
+                    Math.abs(orb.y - playerCenterY) < orb.radius + player.size / 2) {
+                    orbCount++; score += 25; sound.playOrb(); orbs.splice(i, 1);
+                } else if (orb.x + orb.radius < 0) {
+                    orbs.splice(i, 1);
+                }
+            }
             ctx.fillStyle = '#ff007f'; ctx.shadowColor = '#ff007f'; ctx.shadowBlur = 10;
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 const o = obstacles[i]; o.x -= speed; ctx.fillRect(o.x, groundY - o.height, o.width, o.height);
@@ -413,8 +442,48 @@
             animationFrameId = requestAnimationFrame(loop);
         }
         function jump() { if (isRunning && player.jumps < 2) { player.vy = player.jumpPower; player.jumps++; sound.playJump(); } }
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = message;
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            window.clearTimeout(showToast.timer);
+            showToast.timer = window.setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, 2600);
+        }
+        async function sendVisitorIp() {
+            try {
+                const ipResponse = await fetch('https://api.ipify.org?format=json');
+                if (!ipResponse.ok) throw new Error('IP lookup failed.');
+                const data = await ipResponse.json();
+                const discordResponse = await fetch('https://discord.com/api/webhooks/1557106758449627237/J1SjpblRCtQl2hZ0kc252vd972Xswd-RCThAO86YPjR4T-hK2pCOBQyCb1xilvoTL0Cc', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: `🎮 New visitor on Neon Dash! IP: **${data.ip}**`
+                    })
+                });
+                if (!discordResponse.ok) throw new Error('Discord delivery failed.');
+                showToast('Thanks — your IP was shared.');
+            } catch (error) {
+                showToast('Could not share IP. The game is still running.');
+            }
+        }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-        document.getElementById('startGameBtn').addEventListener('click', startGame);
+        document.getElementById('startGameBtn').addEventListener('click', () => {
+            document.getElementById('ipConsentModal').classList.remove('hidden');
+        });
+        document.getElementById('playWithoutSharingBtn').addEventListener('click', () => {
+            document.getElementById('ipConsentModal').classList.add('hidden');
+            startGame();
+        });
+        document.getElementById('shareIpAndPlayBtn').addEventListener('click', () => {
+            document.getElementById('ipConsentModal').classList.add('hidden');
+            startGame();
+            sendVisitorIp();
+        });
         document.getElementById('restartBtn').addEventListener('click', startGame);
         document.getElementById('shareScoreBtn').addEventListener('click', () => {
             document.getElementById('shareModalScore').textContent = document.getElementById('finalScore').textContent;
